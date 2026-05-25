@@ -655,7 +655,7 @@ function setupHourlyTrigger() {
     .everyHours(1)
     .create();
 
-  Logger.log('✅ Hourly trigger for recordMetricsSnapshot installed successfully.');
+  Logger.log(' Hourly trigger for recordMetricsSnapshot installed successfully.');
 }
 
 
@@ -780,7 +780,7 @@ function sendClaimNotification_(caseData, smeEmail) {
     if (!caseData.submitter) return;
 
     const smeLdap    = smeEmail.split('@')[0];
-    const subject    = '✅ Your escalation has been picked up — Case ' + caseData.caseId;
+    const subject    = ' Your escalation has been picked up — Case ' + caseData.caseId;
     const claimedAt  = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
     const submittedAt = caseData.timestamp
       ? new Date(caseData.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' })
@@ -803,7 +803,7 @@ function sendClaimNotification_(caseData, smeEmail) {
             <table width="100%" cellpadding="0" cellspacing="0"><tr>
               <td><div style="color:#ffffff;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Google Play · Escalations</div>
               <div style="color:#ffffff;font-size:22px;font-weight:700;line-height:1.3;">Case Picked Up</div></td>
-              <td align="right"><div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;display:inline-block;"><span style="color:#ffffff;font-size:20px;">✅</span></div></td>
+              <td align="right"><div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;display:inline-block;"><span style="color:#ffffff;font-size:20px;"></span></div></td>
             </tr></table>
           </td>
         </tr>
@@ -852,7 +852,7 @@ function sendResolveNotification_(caseData, smeEmail) {
     if (!caseData.submitter) return;
 
     const smeLdap     = smeEmail.split('@')[0];
-    const subject     = '🎉 Your escalation has been resolved — Case ' + caseData.caseId;
+    const subject     = ' Your escalation has been resolved — Case ' + caseData.caseId;
     const resolvedAt  = new Date(caseData.resolutionTime).toLocaleString('en-US', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
     const submittedAt = caseData.timestamp
       ? new Date(caseData.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' })
@@ -875,7 +875,7 @@ function sendResolveNotification_(caseData, smeEmail) {
             <table width="100%" cellpadding="0" cellspacing="0"><tr>
               <td><div style="color:#ffffff;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Google Play · Escalations</div>
               <div style="color:#ffffff;font-size:22px;font-weight:700;line-height:1.3;">Case Resolved</div></td>
-              <td align="right"><div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;display:inline-block;"><span style="color:#ffffff;font-size:20px;">🎉</span></div></td>
+              <td align="right"><div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;display:inline-block;"><span style="color:#ffffff;font-size:20px;"></span></div></td>
             </tr></table>
           </td>
         </tr>
@@ -1165,7 +1165,7 @@ function checkSLAWarnings() {
 ───────────────────────────────────────── */
 function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, symptom, reason, channel, team, submittedStr, hoursOld, testMode_) {
   try {
-    const subject = '⏰ Friendly Reminder: Your Escalation Has Been Pending for 24 Hours';
+    const subject = ' Friendly Reminder: Your Escalation Has Been Pending for 24 Hours';
     const caseLink = 'https://cases.connect.corp.google.com/' + caseId;
 
     const body = `
@@ -1192,7 +1192,7 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
               </td>
               <td align="right" valign="top">
                 <div style="background:rgba(255,255,255,0.2);border-radius:12px;padding:14px 18px;text-align:center;display:inline-block;">
-                  <div style="font-size:36px;line-height:1;">⏰</div>
+                  <div style="font-size:36px;line-height:1;"></div>
                   <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;">${hoursOld}h OLD</div>
                 </div>
               </td>
@@ -1213,7 +1213,7 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- CASE DETAILS BOX -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#FEF7E0;border-radius:10px;border-left:4px solid #F9AB00;margin-bottom:24px;">
               <tr><td style="padding:20px 24px;">
-                <div style="color:#B06000;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;">📋 Case Details</div>
+                <div style="color:#B06000;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;"> Case Details</div>
                 ${slaRow_('Case ID',   '<a href="' + caseLink + '" style="color:#1A73E8;font-weight:600;">' + caseId + '</a>', true)}
                 ${slaRow_('Agent',     ldap)}
                 ${slaRow_('Symptom',   symptom)}
@@ -1227,7 +1227,7 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- WHAT TO DO -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#E8F0FE;border-radius:10px;margin-bottom:24px;">
               <tr><td style="padding:18px 24px;">
-                <div style="color:#1967D2;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">💡 What happens next?</div>
+                <div style="color:#1967D2;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;"> What happens next?</div>
                 <p style="margin:0;color:#3c4043;font-size:13px;line-height:1.7;">
                   A supervisor or SME from <strong>${team}</strong> will pick up your case shortly. If this is urgent, please reach out to your team lead directly. You will receive another notification if your case remains unresolved at the 48-hour mark.
                 </p>
@@ -1284,7 +1284,7 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
 ───────────────────────────────────────── */
 function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, symptom, reason, channel, team, submittedStr, hoursOld, testMode_) {
   try {
-    const subject = '🚨 Urgent: Escalation Case Unresolved for 48 Hours — Immediate Action Required';
+    const subject = ' Urgent: Escalation Case Unresolved for 48 Hours — Immediate Action Required';
     const caseLink = 'https://cases.connect.corp.google.com/' + caseId;
 
     const body = `
@@ -1309,7 +1309,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
               </td>
               <td align="right" valign="top">
                 <div style="background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.4);border-radius:12px;padding:14px 18px;text-align:center;display:inline-block;">
-                  <div style="font-size:36px;line-height:1;">🚨</div>
+                  <div style="font-size:36px;line-height:1;"></div>
                   <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;">${hoursOld}h OLD</div>
                 </div>
               </td>
@@ -1324,7 +1324,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
         <tr>
           <td style="background:#FCE8E6;padding:16px 32px;border-bottom:1px solid #F5C6C6;">
             <p style="margin:0;color:#C5221F;font-size:14px;font-weight:600;text-align:center;">
-              ⚠️ &nbsp;This case has been in the queue for <strong>${hoursOld} hours</strong> without resolution. Management has been notified.
+               &nbsp;This case has been in the queue for <strong>${hoursOld} hours</strong> without resolution. Management has been notified.
             </p>
           </td>
         </tr>
@@ -1339,7 +1339,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- CASE DETAILS BOX -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#FCE8E6;border-radius:10px;border-left:4px solid #EA4335;margin-bottom:24px;">
               <tr><td style="padding:20px 24px;">
-                <div style="color:#C5221F;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;">🚨 Case Details</div>
+                <div style="color:#C5221F;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;"> Case Details</div>
                 ${slaRow_('Case ID',   '<a href="' + caseLink + '" style="color:#C5221F;font-weight:700;">' + caseId + '</a>', true)}
                 ${slaRow_('Agent',     ldap)}
                 ${slaRow_('Symptom',   symptom)}
@@ -1354,7 +1354,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- REQUIRED ACTION -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#FEF7E0;border-radius:10px;border-left:4px solid #F9AB00;margin-bottom:24px;">
               <tr><td style="padding:18px 24px;">
-                <div style="color:#B06000;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">⚡ Required Action</div>
+                <div style="color:#B06000;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;"> Required Action</div>
                 <p style="margin:0 0 10px;color:#3c4043;font-size:13px;line-height:1.7;">
                   The following actions must be taken immediately:
                 </p>
@@ -1369,7 +1369,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- MANAGERS NOTIFIED -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#E6F4EA;border-radius:10px;border-left:4px solid #34A853;margin-bottom:24px;">
               <tr><td style="padding:16px 24px;">
-                <div style="color:#137333;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">✅ Managers Notified</div>
+                <div style="color:#137333;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;"> Managers Notified</div>
                 <p style="margin:0;color:#3c4043;font-size:13px;line-height:1.6;">
                   This alert has been automatically copied to the Play Ops management team for visibility and follow-up.
                 </p>
@@ -1454,7 +1454,7 @@ function setupSLATrigger() {
     .everyHours(1)
     .create();
 
-  Logger.log('✅ SLA Warning trigger installed successfully.');
+  Logger.log(' SLA Warning trigger installed successfully.');
 }
 function testSLAEmails() {
   var ME          = 'stevenjosephc@google.com';
@@ -1472,7 +1472,7 @@ function testSLAEmails() {
   sendSLA24hrEmail_(ME, '', [], caseId, ldap, symptom, reason, channel, team, submittedStr, 24, true);
   sendSLA48hrEmail_(ME, '', [], caseId, ldap, symptom, reason, channel, team, submittedStr, 48, true);
 
-  Logger.log('✅ Test emails sent only to ' + ME);
+  Logger.log(' Test emails sent only to ' + ME);
 }
 function initSLAColumns() {
   const ss    = SpreadsheetApp.openById(MASTER_DB_ID);
@@ -1512,7 +1512,7 @@ function initSLAColumns() {
     }
   });
 
-  Logger.log('✅ initSLAColumns complete. Marked ' + marked24 + ' cases as 24hr warned, ' + marked48 + ' cases as 48hr warned.');
+  Logger.log(' initSLAColumns complete. Marked ' + marked24 + ' cases as 24hr warned, ' + marked48 + ' cases as 48hr warned.');
 }
 
 function debugSchedule() {
@@ -1541,4 +1541,153 @@ function debugSchedule() {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const todayLabel = months[nowPHT.getUTCMonth()] + '-' + nowPHT.getUTCDate();
   Logger.log('Today label we are looking for: ' + todayLabel);
+}
+
+/**
+ * Advanced analytics data fetcher.
+ */
+function getAnalyticsData(filters) {
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  const sheet = ss.getSheetByName('Open Sup Cases');
+  if (!sheet) return {};
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 3) return {};
+
+  // Pull last 5000 rows for analysis
+  const rowLimit = Math.min(lastRow - 2, 5000);
+  const startRow = lastRow - rowLimit + 1;
+  const data = sheet.getRange(startRow, 1, rowLimit, 17).getValues();
+
+  const results = {
+    trends: {},
+    teamPerformance: {},
+    driverBreakdown: {},
+    channelVolume: {}
+  };
+
+  data.forEach(row => {
+    const timestamp = row[0];
+    const team = row[8];
+    const channel = row[7];
+    const remarks = row[14];
+    const resolutionType = row[16];
+    const resTime = row[12];
+    const claimTime = row[15];
+
+    if (!timestamp) return;
+
+    // Date grouping
+    const date = new Date(timestamp);
+    const dateKey = date.toISOString().split('T')[0];
+
+    if (!results.trends[dateKey]) results.trends[dateKey] = { submitted: 0, resolved: 0 };
+    results.trends[dateKey].submitted++;
+
+    if (remarks) {
+      if (resTime) {
+        const resDate = new Date(resTime);
+        const resDateKey = resDate.toISOString().split('T')[0];
+        if (!results.trends[resDateKey]) results.trends[resDateKey] = { submitted: 0, resolved: 0 };
+        results.trends[resDateKey].resolved++;
+      }
+
+      // Team Performance
+      if (!results.teamPerformance[team]) results.teamPerformance[team] = { count: 0, totalTat: 0 };
+      results.teamPerformance[team].count++;
+      if (resTime && claimTime) {
+        const tat = (new Date(resTime) - new Date(claimTime)) / (1000 * 60);
+        if (tat > 0) results.teamPerformance[team].totalTat += tat;
+      }
+
+      // Drivers
+      if (resolutionType) {
+        const l1 = resolutionType.split(' > ')[0];
+        results.driverBreakdown[l1] = (results.driverBreakdown[l1] || 0) + 1;
+      }
+    }
+
+    // Channel
+    results.channelVolume[channel] = (results.channelVolume[channel] || 0) + 1;
+  });
+
+  return results;
+}
+
+/**
+ * Enhanced Analytics with Filtering.
+ */
+function getAnalyticsDataFiltered(timeframeDays, teamFilter) {
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  const sheet = ss.getSheetByName('Open Sup Cases');
+  if (!sheet) return {};
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 3) return {};
+
+  const data = sheet.getRange(3, 1, lastRow - 2, 17).getValues();
+  const now = new Date();
+  const cutoffDate = new Date();
+  cutoffDate.setDate(now.getDate() - parseInt(timeframeDays));
+
+  const results = {
+    trends: {},
+    driverBreakdown: {},
+    channelVolume: {},
+    metrics: {
+      total: 0,
+      resolved: 0,
+      totalTat: 0,
+      tatCount: 0
+    }
+  };
+
+  data.forEach(row => {
+    const timestamp = row[0];
+    const team = row[8];
+    const channel = row[7];
+    const remarks = row[14];
+    const resolutionType = row[16];
+    const resTime = row[12];
+    const claimTime = row[15];
+
+    if (!timestamp) return;
+    const date = new Date(timestamp);
+    if (date < cutoffDate) return;
+    if (teamFilter && teamFilter !== 'all' && team !== teamFilter) return;
+
+    results.metrics.total++;
+
+    // Trends
+    const dateKey = date.toISOString().split('T')[0];
+    if (!results.trends[dateKey]) results.trends[dateKey] = { submitted: 0, resolved: 0 };
+    results.trends[dateKey].submitted++;
+
+    if (remarks) {
+      results.metrics.resolved++;
+      if (resTime) {
+        const resDate = new Date(resTime);
+        const resDateKey = resDate.toISOString().split('T')[0];
+        if (!results.trends[resDateKey]) results.trends[resDateKey] = { submitted: 0, resolved: 0 };
+        results.trends[resDateKey].resolved++;
+      }
+
+      if (resTime && claimTime) {
+        const tat = (new Date(resTime) - new Date(claimTime)) / (1000 * 60);
+        if (tat > 0) {
+          results.metrics.totalTat += tat;
+          results.metrics.tatCount++;
+        }
+      }
+
+      if (resolutionType) {
+        const l1 = resolutionType.split(' > ')[0];
+        results.driverBreakdown[l1] = (results.driverBreakdown[l1] || 0) + 1;
+      }
+    }
+
+    results.channelVolume[channel] = (results.channelVolume[channel] || 0) + 1;
+  });
+
+  return results;
 }
