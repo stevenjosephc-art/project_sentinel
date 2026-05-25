@@ -282,9 +282,6 @@
     .tag-error { background-color: #FCE8E6; color: #C5221F; }
     .tag-success { background-color: #E6F4EA; color: #1E8E3E; }
 
-    .sla-bar-container { height: 4px; background-color: var(--md-sys-color-outline-variant); border-radius: 2px; margin-top: 12px; overflow: hidden; }
-    .sla-bar { height: 100%; transition: width 0.5s ease; }
-
     .card-details {
       display: none; padding: 16px 16px 20px 72px; border-top: 1px solid var(--md-sys-color-outline-variant);
       background-color: rgba(0,0,0,0.01);
@@ -310,11 +307,12 @@
     .comments-section {
       background-color: var(--md-sys-color-surface-variant); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px;
     }
-    .comment { display: flex; flex-direction: column; gap: 2px; }
-    .comment-header { display: flex; justify-content: space-between; font-size: 12px; }
+    .comment { display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 8px; }
+    .comment:last-child { border-bottom: none; }
+    .comment-header { display: flex; justify-content: space-between; font-size: 11px; }
     .comment-author { font-weight: 700; color: var(--md-sys-color-on-surface); }
     .comment-time { color: var(--md-sys-color-on-surface-variant); }
-    .comment-text { font-size: 13px; color: #3C4043; }
+    .comment-text { font-size: 13px; color: #3C4043; line-height: 1.4; }
 
     .comment-input-row { display: flex; gap: 8px; margin-top: 4px; background: #FFF; border: 1px solid var(--md-sys-color-outline); border-radius: 24px; padding: 4px 4px 4px 16px; align-items: center; }
     .comment-input { flex: 1; border: none; outline: none; font-size: 13px; padding: 8px 0; }
@@ -330,7 +328,7 @@
       background: var(--md-sys-color-surface); font-family: 'Google Sans'; font-size: 13px; outline: none; cursor: pointer;
     }
 
-    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .metric-card {
       background-color: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline); border-radius: 12px; padding: 20px;
       display: flex; flex-direction: column; gap: 4px;
@@ -340,8 +338,10 @@
 
     .chart-container {
        background-color: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline); border-radius: 12px; padding: 24px;
-       height: 400px; position: relative;
+       height: 400px; position: relative; margin-bottom: 24px;
     }
+
+    .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 
     /* Bulk Action Bar */
     .bulk-action-bar {
@@ -384,6 +384,7 @@
     .form-group label { font-family: 'Google Sans'; font-size: 12px; font-weight: 500; color: var(--md-sys-color-on-surface-variant); }
     .form-input, .form-select {
        padding: 12px; border: 1px solid var(--md-sys-color-outline); border-radius: 4px; font-size: 14px; outline: none;
+       background: #FFF;
     }
     .form-input:focus, .form-select:focus { border-color: var(--md-sys-color-primary); border-width: 2px; padding: 11px; }
 
@@ -396,6 +397,7 @@
     @media (max-width: 900px) {
       .sidebar { position: fixed; left: -100%; height: 100%; }
       .sidebar.open { left: 0; }
+      .analytics-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -428,7 +430,7 @@
         <span>Schedule</span>
       </div>
 
-      <div style="margin-top: 24px; padding: 0 16px 8px; font-size: 11px; font-weight: 700; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.8px;">Teams</div>
+      <div style="margin-top: 24px; padding: 0 16px 8px; font-size: 11px; font-weight: 700; color: var(--md-sys-color-on-surface-variant); text-transform: uppercase; letter-spacing: 0.8px;">Filter by Team</div>
       <div id="team-filters" style="padding: 0 8px;">
         <!-- Populated by JS -->
       </div>
@@ -516,14 +518,27 @@
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
-           <div class="chart-container">
-             <h4 style="font-family:'Google Sans'; font-size: 14px; margin-bottom: 16px;">Volume Trends</h4>
-             <canvas id="trendChart"></canvas>
-           </div>
+        <div class="chart-container">
+           <h4 style="font-family:'Google Sans'; font-size: 14px; margin-bottom: 16px;">Volume Trends</h4>
+           <canvas id="trendChart"></canvas>
+        </div>
+
+        <div class="analytics-grid">
            <div class="chart-container">
              <h4 style="font-family:'Google Sans'; font-size: 14px; margin-bottom: 16px;">Driver Distribution</h4>
              <canvas id="driverChart"></canvas>
+           </div>
+           <div class="chart-container">
+             <h4 style="font-family:'Google Sans'; font-size: 14px; margin-bottom: 16px;">Top Symptoms</h4>
+             <canvas id="symptomChart"></canvas>
+           </div>
+           <div class="chart-container">
+             <h4 style="font-family:'Google Sans'; font-size: 14px; margin-bottom: 16px;">Channel Volume</h4>
+             <canvas id="channelChart"></canvas>
+           </div>
+           <div class="chart-container">
+             <h4 style="font-family:'Google Sans'; font-size: 14px; margin-bottom: 16px;">Team Distribution</h4>
+             <canvas id="teamChart"></canvas>
            </div>
         </div>
       </section>
@@ -587,8 +602,8 @@
       currentTab: 'active',
       searchTerm: '',
       filters: { teams: new Set() },
-      charts: { trend: null, driver: null },
-      pendingAction: null // { type: 'single'|'bulk', rowIdx: n }
+      charts: {},
+      pendingAction: null
     };
 
     const DRIVER_DATA = {
@@ -918,7 +933,10 @@
       document.getElementById('m-rate').innerText = `${rate}%`;
 
       renderTrendChart(data.trends);
-      renderDriverChart(data.driverBreakdown);
+      renderPieChart('driverChart', data.driverBreakdown);
+      renderBarChart('symptomChart', data.symptomVolume);
+      renderPieChart('channelChart', data.channelVolume);
+      renderBarChart('teamChart', data.teamVolume);
     }
 
     function renderTrendChart(trends) {
@@ -939,17 +957,38 @@
       });
     }
 
-    function renderDriverChart(drivers) {
-      const ctx = document.getElementById('driverChart').getContext('2d');
-      if (state.charts.driver) state.charts.driver.destroy();
+    function renderPieChart(canvasId, dataMap) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      if (state.charts[canvasId]) state.charts[canvasId].destroy();
 
-      state.charts.driver = new Chart(ctx, {
+      state.charts[canvasId] = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: Object.keys(drivers),
-          datasets: [{ data: Object.values(drivers), backgroundColor: ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#9334E6'] }]
+          labels: Object.keys(dataMap),
+          datasets: [{ data: Object.values(dataMap), backgroundColor: ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#9334E6', '#24C1E0', '#5F6368'] }]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+      });
+    }
+
+    function renderBarChart(canvasId, dataMap) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      if (state.charts[canvasId]) state.charts[canvasId].destroy();
+
+      const sorted = Object.entries(dataMap).sort((a,b) => b[1] - a[1]).slice(0, 10);
+
+      state.charts[canvasId] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: sorted.map(x => x[0]),
+          datasets: [{ data: sorted.map(x => x[1]), backgroundColor: '#4285F4' }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } }
+        }
       });
     }
 

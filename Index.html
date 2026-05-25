@@ -39,99 +39,108 @@
       background-color: var(--md-sys-color-surface);
       width: 100%;
       max-width: 800px;
-      border-radius: 24px;
+      border-radius: 28px;
       overflow: hidden;
       box-shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+      position: relative;
     }
 
     header {
       background-color: var(--md-sys-color-primary-container);
-      padding: 32px;
+      padding: 40px 32px;
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 24px;
     }
 
     .header-icon {
       background-color: #FFFFFF;
       padding: 12px;
-      border-radius: 12px;
+      border-radius: 16px;
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: 0 1px 2px rgba(60,64,67,0.3);
     }
 
-    .header-icon img { width: 32px; height: 32px; }
+    .header-icon img { width: 36px; height: 36px; }
 
     .header-text h1 {
       font-family: 'Google Sans';
-      font-size: 24px;
+      font-size: 28px;
       font-weight: 400;
       color: var(--md-sys-color-on-primary-container);
+      margin-bottom: 4px;
     }
 
     .header-text p {
       font-size: 14px;
       color: var(--md-sys-color-on-primary-container);
-      opacity: 0.7;
+      opacity: 0.8;
     }
 
-    .form-body { padding: 32px; display: flex; flex-direction: column; gap: 32px; }
+    .form-body { padding: 32px; display: flex; flex-direction: column; gap: 40px; }
 
-    .section { display: flex; flex-direction: column; gap: 20px; }
+    .section { display: flex; flex-direction: column; gap: 24px; }
 
     .section-title {
       font-family: 'Google Sans';
       font-size: 12px;
       font-weight: 500;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 1.2px;
       color: var(--md-sys-color-primary);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
     }
     .section-title::after { content: ''; flex: 1; height: 1px; background: var(--md-sys-color-outline); }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 32px;
     }
 
     .input-field { display: flex; flex-direction: column; gap: 8px; position: relative; }
     .input-field label { font-family: 'Google Sans'; font-size: 14px; font-weight: 500; color: var(--md-sys-color-on-surface-variant); }
 
     .input-field input, .input-field select, .input-field textarea {
-      padding: 12px 16px;
+      padding: 14px 16px;
       border: 1px solid var(--md-sys-color-outline);
-      border-radius: 4px;
+      border-radius: 8px;
       font-size: 16px;
       outline: none;
       transition: var(--transition);
       background-color: transparent;
+      font-family: 'Roboto';
     }
 
     .input-field input:focus, .input-field select:focus, .input-field textarea:focus {
       border-color: var(--md-sys-color-primary);
       border-width: 2px;
-      padding: 11px 15px;
+      padding: 13px 15px;
     }
 
     .input-field.error input, .input-field.error select, .input-field.error textarea {
       border-color: var(--md-sys-color-error);
     }
 
-    .error-text { color: var(--md-sys-color-error); font-size: 12px; display: none; }
+    .error-text { color: var(--md-sys-color-error); font-size: 12px; display: none; margin-top: 4px; }
     .input-field.error .error-text { display: block; }
 
     .autocomplete-items {
-      position: absolute; top: 100%; left: 0; right: 0; z-index: 99;
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 99;
       background: #FFF; border: 1px solid var(--md-sys-color-outline);
-      border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      max-height: 200px; overflow-y: auto;
+      border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-height: 240px; overflow-y: auto;
     }
-    .autocomplete-items div { padding: 12px; cursor: pointer; }
+    .autocomplete-items div {
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
     .autocomplete-items div:hover { background-color: var(--md-sys-color-surface-variant); }
 
     .footer {
@@ -139,11 +148,11 @@
       border-top: 1px solid var(--md-sys-color-outline);
       display: flex;
       justify-content: flex-end;
-      background-color: var(--md-sys-color-surface-variant);
+      background-color: #FBFBFB;
     }
 
     .btn {
-      padding: 12px 32px;
+      padding: 14px 36px;
       border-radius: 100px;
       font-family: 'Google Sans';
       font-weight: 500;
@@ -151,18 +160,32 @@
       cursor: pointer;
       border: none;
       transition: var(--transition);
-      display: flex; align-items: center; gap: 8px;
+      display: flex; align-items: center; gap: 10px;
     }
     .btn-primary { background-color: var(--md-sys-color-primary); color: #FFF; }
-    .btn-primary:hover { background-color: #174EA6; box-shadow: 0 1px 2px rgba(60,64,67,0.3); }
-    .btn:disabled { background-color: var(--md-sys-color-outline); cursor: not-allowed; }
+    .btn-primary:hover { background-color: #174EA6; box-shadow: 0 1px 3px rgba(60,64,67,0.3); }
+    .btn:disabled { background-color: var(--md-sys-color-outline); cursor: not-allowed; opacity: 0.6; }
 
     #success-overlay {
       position: absolute; inset: 0; background: #FFF; z-index: 100;
       display: none; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; padding: 48px;
     }
-    #success-overlay h2 { font-family: 'Google Sans'; font-size: 28px; font-weight: 400; margin-bottom: 16px; }
+    #success-overlay h2 { font-family: 'Google Sans'; font-size: 32px; font-weight: 400; margin-bottom: 16px; color: var(--md-sys-color-primary); }
+
+    /* Custom Select Styling */
+    select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' height='24' viewBox='0 0 24 24' width='24'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 12px; }
+      header { padding: 24px; }
+      .form-body { padding: 24px; gap: 32px; }
+    }
   </style>
 </head>
 <body>
@@ -174,26 +197,26 @@
       </div>
       <div class="header-text">
         <h1>Escalation Request</h1>
-        <p id="user-email">Session loading...</p>
+        <p id="user-email">Verifying session...</p>
       </div>
     </header>
 
     <div class="form-body">
       <form id="escalationForm">
         <div class="section">
-          <div class="section-title">Agent Details</div>
+          <div class="section-title">Agent Context</div>
           <div class="grid">
             <div class="input-field">
-              <label>Your LDAP</label>
-              <input type="text" id="ldap" required autocomplete="off">
+              <label>LDAP</label>
+              <input type="text" id="ldap" required autocomplete="off" placeholder="Your Google LDAP">
               <div id="ldap-autocomplete" class="autocomplete-items"></div>
             </div>
             <div class="input-field">
-              <label>Team</label>
+              <label>Assigning Team</label>
               <select id="team" required><option value="" disabled selected>Select Team...</option></select>
             </div>
             <div class="input-field">
-              <label>Channel</label>
+              <label>Support Channel</label>
               <select id="channel" required>
                 <option value="" disabled selected>Select Channel...</option>
                 <option value="Chat">Chat</option>
@@ -205,30 +228,30 @@
         </div>
 
         <div class="section">
-          <div class="section-title">Case Details</div>
+          <div class="section-title">Case Information</div>
           <div class="grid">
             <div class="input-field">
-              <label>Case ID</label>
+              <label>Connect Case ID</label>
               <input type="text" id="caseId" placeholder="1-xxxxxxxxxxxxx" required>
-              <div class="error-text" id="caseId-error">Format: 1 digit - 13 digits</div>
+              <div class="error-text" id="caseId-error">Invalid format. Required: 1-xxxxxxxxxxxxx</div>
             </div>
             <div class="input-field">
-              <label>Symptom</label>
-              <input type="text" id="symptom" required autocomplete="off">
+              <label>Primary Symptom</label>
+              <input type="text" id="symptom" required autocomplete="off" placeholder="Search or type symptom...">
               <div id="symptom-autocomplete" class="autocomplete-items"></div>
             </div>
           </div>
         </div>
 
         <div class="section">
-          <div class="section-title">Escalation Context</div>
+          <div class="section-title">Issue Details</div>
           <div class="input-field">
-            <label>Detailed Issue</label>
-            <textarea id="detailedIssue" rows="4" required></textarea>
+            <label>Detailed Customer Issue</label>
+            <textarea id="detailedIssue" rows="4" required placeholder="What is the customer experiencing?"></textarea>
           </div>
           <div class="input-field">
             <label>Reason for Escalation</label>
-            <textarea id="reason" rows="3" required></textarea>
+            <textarea id="reason" rows="3" required placeholder="Why is SME/Supervisor intervention needed?"></textarea>
           </div>
         </div>
       </form>
@@ -236,24 +259,26 @@
 
     <div class="footer">
       <button class="btn btn-primary" id="submitBtn" onclick="submitForm()">
-        <span>Submit Request</span>
+        <span>Submit to Queue</span>
         <span class="material-symbols-outlined">send</span>
       </button>
     </div>
 
     <div id="success-overlay">
-      <span class="material-symbols-outlined" style="font-size: 64px; color: var(--md-sys-color-primary); margin-bottom: 24px;">check_circle</span>
-      <h2>Submitted Successfully</h2>
-      <p style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 32px;">Your request has been added to the queue.</p>
-      <button class="btn btn-primary" onclick="location.reload()">Submit Another</button>
+      <span class="material-symbols-outlined" style="font-size: 80px; color: #1E8E3E; margin-bottom: 24px;">check_circle</span>
+      <h2>Successfully Queued</h2>
+      <p style="color: var(--md-sys-color-on-surface-variant); margin-bottom: 32px; font-size: 16px;">The triage team has been notified of your escalation.</p>
+      <button class="btn btn-primary" onclick="location.reload()">Submit Another Request</button>
     </div>
   </div>
 
   <script>
     window.onload = () => {
       google.script.run.withSuccessHandler(user => {
-        document.getElementById('user-email').innerText = user.email;
-        document.getElementById('ldap').value = user.ldap;
+        document.getElementById('user-email').innerText = `Logged in as ${user.email}`;
+        if (!document.getElementById('ldap').value) {
+           document.getElementById('ldap').value = user.ldap;
+        }
       }).getSessionAndRole();
 
       google.script.run.withSuccessHandler(data => {
@@ -274,8 +299,9 @@
       input.addEventListener('input', () => {
         const val = input.value.toLowerCase();
         container.innerHTML = '';
-        if (!val) return;
-        list.filter(x => x.toLowerCase().includes(val)).slice(0, 10).forEach(match => {
+        if (!val || val.length < 2) return;
+        const matches = list.filter(x => x.toLowerCase().includes(val)).slice(0, 8);
+        matches.forEach(match => {
           const div = document.createElement('div');
           div.innerText = match;
           div.onclick = () => { input.value = match; container.innerHTML = ''; };
@@ -288,6 +314,10 @@
     function submitForm() {
       const btn = document.getElementById('submitBtn');
       const form = document.getElementById('escalationForm');
+
+      // Reset errors
+      document.getElementById('caseId').parentElement.classList.remove('error');
+
       if (!form.checkValidity()) return form.reportValidity();
 
       const caseId = document.getElementById('caseId').value.trim();
@@ -297,6 +327,8 @@
       }
 
       btn.disabled = true;
+      btn.innerText = 'Submitting...';
+
       const data = {
         ldap: document.getElementById('ldap').value,
         team: document.getElementById('team').value,
@@ -309,7 +341,11 @@
 
       google.script.run.withSuccessHandler(res => {
         if (res.success) document.getElementById('success-overlay').style.display = 'flex';
-        else { alert(res.message); btn.disabled = false; }
+        else {
+          alert(res.message);
+          btn.disabled = false;
+          btn.innerHTML = '<span>Submit to Queue</span><span class="material-symbols-outlined">send</span>';
+        }
       }).submitEscalation(data);
     }
   </script>

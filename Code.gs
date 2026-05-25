@@ -13,6 +13,12 @@ const SCHEMA = {
     'Email Address', 'LDAP', 'Role'
     // cols D+ are dynamic date columns — not validated here
   ],
+  'AppConfig': [
+    'Type', 'Value', 'SubValue'
+  ],
+  'Case Comments': [
+    'Case ID', 'Timestamp', 'Author', 'Comment'
+  ],
   'Metrics': [
     'Snapshot Time', 'Open Queue', 'Unclaimed', 'Claimed',
     'Resolved Today', 'Avg TAT Today (mins)',
@@ -129,18 +135,32 @@ function getSessionAndRole() {
   try { email = Session.getActiveUser().getEmail(); } catch (e) {}
   var ldap = email.split('@')[0].toLowerCase().trim();
 
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  const configSheet = ss.getSheetByName('AppConfig');
+  const configData = configSheet.getLastRow() > 1 ? configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues() : [];
+
   var myTeam = null;
-  for (var team in TEAM_SUPERVISOR_MAP) {
-    if (TEAM_SUPERVISOR_MAP[team] === ldap) { myTeam = team; break; }
+  // Look for supervisor mapping
+  for (let row of configData) {
+    if (row[0] === 'TEAM_SUPERVISOR' && row[2].toLowerCase().trim() === ldap) {
+      myTeam = row[1];
+      break;
+    }
   }
+
   if (!myTeam) {
-    for (var team in TEAM_SME_MAP) {
-      if ((TEAM_SME_MAP[team] || []).indexOf(ldap) > -1) { myTeam = team; break; }
+    // Look for SME mapping
+    for (let row of configData) {
+      if (row[0] === 'TEAM_SME' && row[2].toLowerCase().trim() === ldap) {
+        myTeam = row[1];
+        break;
+      }
     }
   }
 
   return {
     email: email || '',
+    ldap: ldap,
     isSME: isUserSME_(email),
     myTeam: myTeam || null
   };
@@ -238,11 +258,12 @@ function submitEscalation(formData) {
     const rowToAppend = [
       new Date(), submitterEmail, formData.ldap.trim(), formData.caseId.trim(),
       formData.symptom.trim(), formData.detailedIssue.trim(), formData.reason.trim(),
-      formData.channel, formData.team
+      formData.channel, formData.team,
+      'https://cases.connect.corp.google.com/' + formData.caseId.trim()
     ];
 
     sheet.appendRow(rowToAppend);
-_log('SUBMIT', submitterEmail, 'Case submitted', -1, formData.caseId, formData.ldap + ' | ' + formData.symptom);
+    _log('SUBMIT', submitterEmail, 'Case submitted', -1, formData.caseId, formData.ldap + ' | ' + formData.symptom);
 
     return { success: true, message: 'Escalation submitted successfully!' };
   } catch (err) { return { success: false, message: 'Server Error: ' + err.message }; }
@@ -733,6 +754,82 @@ function claimMultipleCases(rowIdxArray) {
   } catch (e) { return { success: false, message: e.message }; }
 }
 
+/**
+ * Bulk Resolve Cases.
+ */
+function bulkResolve(rowIdxArray, remarks, resolutionType) {
+  _checkRateLimit('resolveCase');
+  requireSME_();
+  try {
+    const ss             = SpreadsheetApp.openById(MASTER_DB_ID);
+    const sheet          = ss.getSheetByName('Open Sup Cases');
+    const smeEmail       = Session.getActiveUser().getEmail();
+    const resolutionTime = new Date();
+
+    rowIdxArray.forEach(rowIdx => {
+      const row = sheet.getRange(rowIdx, 1, 1, 16).getValues()[0];
+      const caseData = {
+        submitter      : String(row[1] || ''),
+        ldap           : String(row[2] || ''),
+        caseId         : String(row[3] || ''),
+        symptom        : String(row[4] || ''),
+        detailedIssue  : String(row[5] || ''),
+        reason         : String(row[6] || ''),
+        channel        : String(row[7] || ''),
+        team           : String(row[8] || ''),
+        caseLink       : String(row[9] || ''),
+        timestamp      : row[0] ? new Date(row[0]).toString() : '',
+        resolutionTime : resolutionTime.toString(),
+        remarks        : remarks
+      };
+
+      sheet.getRange(rowIdx, 13).setValue(resolutionTime);
+      sheet.getRange(rowIdx, 15).setValue(remarks);
+      sheet.getRange(rowIdx, 17).setValue(resolutionType || '');
+
+      _log('BULK_RESOLVE', smeEmail, 'Case resolved | Driver: ' + resolutionType, rowIdx, caseData.caseId, remarks.substring(0, 80));
+      sendResolveNotification_(caseData, smeEmail);
+    });
+
+    hideRows();
+    return { success: true, message: rowIdxArray.length + ' cases resolved successfully!' };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+/**
+ * Case Comments Logic.
+ */
+function addComment(caseId, comment) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+    const sheet = ss.getSheetByName('Case Comments');
+    const email = Session.getActiveUser().getEmail();
+    const author = email.split('@')[0];
+
+    sheet.appendRow([caseId, new Date(), author, comment]);
+    return { success: true };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+function getComments(caseId) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+    const sheet = ss.getSheetByName('Case Comments');
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    const data = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    return data
+      .filter(row => row[0].toString() === caseId.toString())
+      .map(row => ({
+        timestamp: row[1],
+        author: row[2],
+        text: row[3]
+      }))
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  } catch (e) { return []; }
+}
+
 function resolveCase(rowIdx, remarks, resolutionType) {
   _checkRateLimit('resolveCase');
   requireSME_();
@@ -1037,6 +1134,109 @@ function archiveOldCases() {
 function getWebAppUrl() {
   return ScriptApp.getService().getUrl();
 }
+
+/**
+ * Migrates hardcoded data to AppConfig sheet.
+ * Run once manually if needed.
+ */
+function importDataToConfig() {
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  const sheet = ss.getSheetByName('AppConfig');
+  if (!sheet) return;
+
+  sheet.clear();
+  sheet.appendRow(['Type', 'Value', 'SubValue']);
+
+  const TEAM_SUPERVISOR_MAP = {
+    'Team Steven': 'stevenjosephc',
+    'Team Gerry':  'gerrymae',
+    'Team Khent':  'khent',
+    'Team James':  'jamessevilla',
+    'Team Denden': 'bernardboy',
+    'Team Jim':    'jadoptante',
+    'Team Al':     'acaluang',
+    'Team Faye':   'fajirnah',
+    'Team Mel':    'tapalla',
+    'Team Mary':   'marineth'
+  };
+
+  const TEAM_SME_MAP = {
+    'Team Steven': ['sheenamae'],
+    'Team Gerry':  ['caval'],
+    'Team Khent':  ['criseldaa'],
+    'Team James':  ['acemile'],
+    'Team Denden': ['jgarlet'],
+    'Team Jim':    ['glendajoe'],
+    'Team Al':     ['elagarto'],
+    'Team Faye':   ['neljhon', 'mquirol'],
+    'Team Mel':    ['fykeivan', 'mabubay'],
+    'Team Mary':   ['fykeivan']
+  };
+
+  const data = [];
+
+  // Teams & Supervisors
+  for (let team in TEAM_SUPERVISOR_MAP) {
+    data.push(['TEAM_SUPERVISOR', team, TEAM_SUPERVISOR_MAP[team]]);
+  }
+
+  // Teams & SMEs
+  for (let team in TEAM_SME_MAP) {
+    TEAM_SME_MAP[team].forEach(sme => {
+      data.push(['TEAM_SME', team, sme]);
+    });
+  }
+
+  // Example Symptoms (since they are currently passed from client-side or hardcoded in Index.html logic)
+  const symptoms = ['Can\'t redeem gift card', 'Refund status', 'Account Recovery', 'Identity verification process', 'Wrong country or currency', 'Refund policy & process'];
+  symptoms.forEach(s => data.push(['SYMPTOM', s, '']));
+
+  if (data.length > 0) {
+    sheet.getRange(2, 1, data.length, 3).setValues(data);
+  }
+
+  Logger.log('Migration to AppConfig complete.');
+}
+
+/**
+ * Fetches dynamic configuration for the form and dashboard.
+ * Utilizes CacheService for performance.
+ */
+function getFormData() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('form_data_v2');
+  if (cached) return JSON.parse(cached);
+
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  const configSheet = ss.getSheetByName('AppConfig');
+  const supSheet = ss.getSheetByName('SupervisorList');
+
+  const configData = configSheet.getLastRow() > 1 ? configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues() : [];
+  const supData = supSheet.getLastRow() > 1 ? supSheet.getRange(2, 1, supSheet.getLastRow() - 1, 2).getValues() : [];
+
+  const teams = new Set();
+  const symptoms = [];
+  const ldaps = new Set();
+
+  configData.forEach(row => {
+    if (row[0] === 'TEAM_SUPERVISOR' || row[0] === 'TEAM_SME') teams.add(row[1]);
+    if (row[0] === 'SYMPTOM') symptoms.push(row[1]);
+  });
+
+  supData.forEach(row => {
+    if (row[1]) ldaps.add(row[1].toString().trim());
+  });
+
+  const result = {
+    teams: Array.from(teams),
+    symptoms: symptoms,
+    ldaps: Array.from(ldaps)
+  };
+
+  cache.put('form_data_v2', JSON.stringify(result), 1800); // 30 min cache
+  return result;
+}
+
 function testEmail() {
   MailApp.sendEmail({
     to: 'stevenjosephc@google.com',
@@ -1050,31 +1250,6 @@ function testEmail() {
    warning for any open case that has not yet been resolved.
 ═══════════════════════════════════════════════════════════════════ */
 
-var TEAM_SUPERVISOR_MAP = {
-  'Team Steven': 'stevenjosephc',
-  'Team Gerry':  'gerrymae',
-  'Team Khent':  'khent',
-  'Team James':  'jamessevilla',
-  'Team Denden': 'bernardboy',
-  'Team Jim':    'jadoptante',
-  'Team Al':     'acaluang',
-  'Team Faye':   'fajirnah',
-  'Team Mel':    'tapalla',
-  'Team Mary':   'marineth'
-};
-
-var TEAM_SME_MAP = {
-  'Team Steven': ['sheenamae'],
-  'Team Gerry':  ['caval'],
-  'Team Khent':  ['criseldaa'],
-  'Team James':  ['acemile'],
-  'Team Denden': ['jgarlet'],
-  'Team Jim':    ['glendajoe'],
-  'Team Al':     ['elagarto'],
-  'Team Faye':   ['neljhon', 'mquirol'],
-  'Team Mel':    ['fykeivan', 'mabubay'],
-  'Team Mary':   ['fykeivan']
-};
 
 var SLA_CC_48HR = ['deanmark@google.com', 'joliveros@google.com', 'jmontrias@google.com'];
 
@@ -1082,10 +1257,13 @@ function checkSLAWarnings() {
   try {
     const ss        = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet     = ss.getSheetByName('Open Sup Cases');
-    if (!sheet) return;
+    const configSheet = ss.getSheetByName('AppConfig');
+    if (!sheet || !configSheet) return;
 
     const lastRow = sheet.getLastRow();
     if (lastRow < 3) return;
+
+    const configData = configSheet.getLastRow() > 1 ? configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues() : [];
 
     // Read cols A–S (1–19)
     const data    = sheet.getRange(3, 1, lastRow - 2, 19).getValues();
@@ -1128,9 +1306,16 @@ function checkSLAWarnings() {
       const sheetRow    = i + 3; // actual sheet row number
 
       const agentEmail  = ldap + '@google.com';
-      const supLdap     = TEAM_SUPERVISOR_MAP[team] || '';
+
+      // Dynamic Lookup
+      let supLdap = '';
+      let smeLdaps = [];
+      configData.forEach(c => {
+        if (c[0] === 'TEAM_SUPERVISOR' && c[1] === team) supLdap = c[2];
+        if (c[0] === 'TEAM_SME' && c[1] === team) smeLdaps.push(c[2]);
+      });
+
       const supEmail    = supLdap ? supLdap + '@google.com' : '';
-      const smeLdaps    = TEAM_SME_MAP[team] || [];
       const smeEmails   = smeLdaps.map(function(s) { return s + '@google.com'; });
       const submittedStr = submitted.toLocaleString('en-US', {
         timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short'
@@ -1192,8 +1377,8 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
               </td>
               <td align="right" valign="top">
                 <div style="background:rgba(255,255,255,0.2);border-radius:12px;padding:14px 18px;text-align:center;display:inline-block;">
-                  <div style="font-size:36px;line-height:1;"></div>
-                  <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;">${hoursOld}h OLD</div>
+                  <div style="color:#fff;font-size:24px;font-weight:700;line-height:1;">${hoursOld}h</div>
+                  <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;text-transform:uppercase;">Pending</div>
                 </div>
               </td>
             </tr></table>
@@ -1309,8 +1494,8 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
               </td>
               <td align="right" valign="top">
                 <div style="background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.4);border-radius:12px;padding:14px 18px;text-align:center;display:inline-block;">
-                  <div style="font-size:36px;line-height:1;"></div>
-                  <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;">${hoursOld}h OLD</div>
+                  <div style="color:#fff;font-size:24px;font-weight:700;line-height:1;">${hoursOld}h</div>
+                  <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;text-transform:uppercase;">Overdue</div>
                 </div>
               </td>
             </tr></table>
@@ -1618,6 +1803,11 @@ function getAnalyticsData(filters) {
  * Enhanced Analytics with Filtering.
  */
 function getAnalyticsDataFiltered(timeframeDays, teamFilter) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'analytics_' + timeframeDays + '_' + (teamFilter || 'all');
+  const cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
   const ss = SpreadsheetApp.openById(MASTER_DB_ID);
   const sheet = ss.getSheetByName('Open Sup Cases');
   if (!sheet) return {};
@@ -1634,6 +1824,10 @@ function getAnalyticsDataFiltered(timeframeDays, teamFilter) {
     trends: {},
     driverBreakdown: {},
     channelVolume: {},
+    symptomVolume: {},
+    teamVolume: {},
+    agentVolume: {},
+    smePerformance: {},
     metrics: {
       total: 0,
       resolved: 0,
@@ -1644,8 +1838,11 @@ function getAnalyticsDataFiltered(timeframeDays, teamFilter) {
 
   data.forEach(row => {
     const timestamp = row[0];
-    const team = row[8];
+    const submitter = row[2]; // LDAP
+    const symptom = row[4];
     const channel = row[7];
+    const team = row[8];
+    const handledBy = row[13]; // SME email
     const remarks = row[14];
     const resolutionType = row[16];
     const resTime = row[12];
@@ -1663,6 +1860,15 @@ function getAnalyticsDataFiltered(timeframeDays, teamFilter) {
     if (!results.trends[dateKey]) results.trends[dateKey] = { submitted: 0, resolved: 0 };
     results.trends[dateKey].submitted++;
 
+    // Submitting Agent Volume
+    results.agentVolume[submitter] = (results.agentVolume[submitter] || 0) + 1;
+    // Symptom Volume
+    results.symptomVolume[symptom] = (results.symptomVolume[symptom] || 0) + 1;
+    // Team Volume
+    results.teamVolume[team] = (results.teamVolume[team] || 0) + 1;
+    // Channel Volume
+    results.channelVolume[channel] = (results.channelVolume[channel] || 0) + 1;
+
     if (remarks) {
       results.metrics.resolved++;
       if (resTime) {
@@ -1677,6 +1883,12 @@ function getAnalyticsDataFiltered(timeframeDays, teamFilter) {
         if (tat > 0) {
           results.metrics.totalTat += tat;
           results.metrics.tatCount++;
+
+          // SME Performance
+          const smeLdap = handledBy.split('@')[0];
+          if (!results.smePerformance[smeLdap]) results.smePerformance[smeLdap] = { count: 0, totalTat: 0 };
+          results.smePerformance[smeLdap].count++;
+          results.smePerformance[smeLdap].totalTat += tat;
         }
       }
 
@@ -1685,9 +1897,8 @@ function getAnalyticsDataFiltered(timeframeDays, teamFilter) {
         results.driverBreakdown[l1] = (results.driverBreakdown[l1] || 0) + 1;
       }
     }
-
-    results.channelVolume[channel] = (results.channelVolume[channel] || 0) + 1;
   });
 
+  cache.put(cacheKey, JSON.stringify(results), 300); // 5 min cache
   return results;
 }
