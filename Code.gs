@@ -137,7 +137,11 @@ function getSessionAndRole() {
 
   const ss = SpreadsheetApp.openById(MASTER_DB_ID);
   const configSheet = ss.getSheetByName('AppConfig');
-  const configData = configSheet.getLastRow() > 1 ? configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues() : [];
+
+  let configData = [];
+  if (configSheet && configSheet.getLastRow() > 1) {
+    configData = configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues();
+  }
 
   var myTeam = null;
   // Look for supervisor mapping
@@ -282,6 +286,7 @@ function getOpenCases() {
   _checkRateLimit('getOpenCases');
   const ss = SpreadsheetApp.openById(MASTER_DB_ID);
   const sheet = ss.getSheetByName('Open Sup Cases');
+  if (!sheet) return [];
   const lastRow = sheet.getLastRow();
   if (lastRow < 3) return [];
 
@@ -329,6 +334,7 @@ function getResolvedCases() {
   _checkRateLimit('getResolvedCases');
   const ss = SpreadsheetApp.openById(MASTER_DB_ID);
   const sheet = ss.getSheetByName('Open Sup Cases');
+  if (!sheet) return [];
   const lastRow = sheet.getLastRow();
   if (lastRow < 3) return [];
 
@@ -337,7 +343,7 @@ function getResolvedCases() {
   const rowLimit = Math.min(lastRow - 2, 3000);
   const startRow = lastRow - rowLimit + 1;
 
-  const data = sheet.getRange(startRow, 1, rowLimit, 17).getValues();
+  const data = sheet.getRange(startRow, 1, rowLimit, 19).getValues();
   const resolvedCases = [];
 
   // Loop backwards to get newest first
@@ -690,12 +696,12 @@ function claimCase(rowIdx) {
   try {
     const ss        = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet     = ss.getSheetByName('Open Sup Cases');
+    if (!sheet) throw new Error('Sheet "Open Sup Cases" not found.');
     const smeEmail  = Session.getActiveUser().getEmail();
     const claimedAt = new Date();
 
     sheet.getRange(rowIdx, 16).setValue(claimedAt); // col 16 (P) = Claimed At
-    sheet.getRange(rowIdx, 14).setValue(smeEmail);  // <-- PUT THIS BACK HERE
-    _log('CLAIM', smeEmail, 'Case claimed', rowIdx, caseData.caseId, caseData.ldap);
+    sheet.getRange(rowIdx, 14).setValue(smeEmail);  // col 14 (N) = Handled by
 
     const row = sheet.getRange(rowIdx, 1, 1, 16).getValues()[0];
     const caseData = {
@@ -712,6 +718,7 @@ function claimCase(rowIdx) {
     };
 
     sendClaimNotification_(caseData, smeEmail);
+    _log('CLAIM', smeEmail, 'Case claimed', rowIdx, caseData.caseId, caseData.ldap);
 
     return { success: true, message: 'Case claimed.', email: smeEmail };
   } catch (e) { return { success: false, message: e.message }; }
@@ -723,6 +730,7 @@ function claimMultipleCases(rowIdxArray) {
   try {
     const ss        = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet     = ss.getSheetByName('Open Sup Cases');
+    if (!sheet) throw new Error('Sheet "Open Sup Cases" not found.');
     const smeEmail  = Session.getActiveUser().getEmail();
     const claimedAt = new Date();
 
@@ -763,6 +771,7 @@ function bulkResolve(rowIdxArray, remarks, resolutionType) {
   try {
     const ss             = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet          = ss.getSheetByName('Open Sup Cases');
+    if (!sheet) throw new Error('Sheet "Open Sup Cases" not found.');
     const smeEmail       = Session.getActiveUser().getEmail();
     const resolutionTime = new Date();
 
@@ -803,6 +812,7 @@ function addComment(caseId, comment) {
   try {
     const ss = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet = ss.getSheetByName('Case Comments');
+    if (!sheet) throw new Error('Sheet "Case Comments" not found.');
     const email = Session.getActiveUser().getEmail();
     const author = email.split('@')[0];
 
@@ -815,6 +825,7 @@ function getComments(caseId) {
   try {
     const ss = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet = ss.getSheetByName('Case Comments');
+    if (!sheet) return [];
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return [];
 
@@ -836,6 +847,7 @@ function resolveCase(rowIdx, remarks, resolutionType) {
   try {
     const ss             = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet          = ss.getSheetByName('Open Sup Cases');
+    if (!sheet) throw new Error('Sheet "Open Sup Cases" not found.');
     const smeEmail       = Session.getActiveUser().getEmail();
     const resolutionTime = new Date();
 
@@ -1107,15 +1119,16 @@ function archiveOldCases() {
 
   if (!archiveSheet) {
     archiveSheet = ss.insertSheet('Archive');
-    archiveSheet.appendRow(['Timestamp', 'Email', 'LDAP', 'Case ID', 'Symptom', 'Detailed Issue', 'Reason', 'Channel', 'Team', 'Case ID Link', 'Date', 'Time', 'Time spent before taken', 'Handled By', 'SME Remarks', 'Claimed At', 'Resolution Type']);
-    archiveSheet.getRange(1, 1, 1, 17).setFontWeight('bold').setBackground('#4285F4').setFontColor('#FFFFFF');
+    const headers = SCHEMA['Open Sup Cases'];
+    archiveSheet.appendRow(headers);
+    archiveSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('#FFFFFF');
     archiveSheet.setFrozenRows(1);
   }
 
   const lastRow = sourceSheet.getLastRow();
   if (lastRow < 3) return;
 
-  const data          = sourceSheet.getRange(3, 1, lastRow - 2, 17).getValues();
+  const data          = sourceSheet.getRange(3, 1, lastRow - 2, 19).getValues();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -1140,9 +1153,12 @@ function getWebAppUrl() {
  * Run once manually if needed.
  */
 function importDataToConfig() {
+  _ensureSchema();
   const ss = SpreadsheetApp.openById(MASTER_DB_ID);
-  const sheet = ss.getSheetByName('AppConfig');
-  if (!sheet) return;
+  let sheet = ss.getSheetByName('AppConfig');
+  if (!sheet) {
+    sheet = ss.insertSheet('AppConfig');
+  }
 
   sheet.clear();
   sheet.appendRow(['Type', 'Value', 'SubValue']);
@@ -1187,8 +1203,14 @@ function importDataToConfig() {
     });
   }
 
-  // Example Symptoms (since they are currently passed from client-side or hardcoded in Index.html logic)
-  const symptoms = ['Can\'t redeem gift card', 'Refund status', 'Account Recovery', 'Identity verification process', 'Wrong country or currency', 'Refund policy & process'];
+  // Default Symptoms
+  const symptoms = [
+    'Can\'t redeem gift card', 'Refund status', 'Account Recovery', 'Identity verification process',
+    'Wrong country or currency', 'Refund policy & process', 'Promotion inquiry', 'Subscription management',
+    'Account access issue', 'Device compatibility', 'Payment failure', 'App content issue',
+    'In-app purchase problem', 'Google Play Pass', 'Google Play Points', 'Gift card fraud/scam',
+    'Parental controls/Family Link', 'Unauthorized charges', 'App update/download error'
+  ];
   symptoms.forEach(s => data.push(['SYMPTOM', s, '']));
 
   if (data.length > 0) {
@@ -1208,11 +1230,20 @@ function getFormData() {
   if (cached) return JSON.parse(cached);
 
   const ss = SpreadsheetApp.openById(MASTER_DB_ID);
-  const configSheet = ss.getSheetByName('AppConfig');
+  let configSheet = ss.getSheetByName('AppConfig');
+
+  if (!configSheet || configSheet.getLastRow() < 2) {
+    importDataToConfig();
+    configSheet = ss.getSheetByName('AppConfig');
+  }
+
+  // Final safety check
+  if (!configSheet) return { teams: [], symptoms: [], ldaps: [] };
+
   const supSheet = ss.getSheetByName('SupervisorList');
 
   const configData = configSheet.getLastRow() > 1 ? configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues() : [];
-  const supData = supSheet.getLastRow() > 1 ? supSheet.getRange(2, 1, supSheet.getLastRow() - 1, 2).getValues() : [];
+  const supData = (supSheet && supSheet.getLastRow() > 1) ? supSheet.getRange(2, 1, supSheet.getLastRow() - 1, 2).getValues() : [];
 
   const teams = new Set();
   const symptoms = [];

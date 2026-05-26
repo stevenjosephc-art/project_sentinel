@@ -597,7 +597,7 @@
       openCases: [],
       resolvedCases: [],
       config: { teams: [] },
-      user: {},
+      user: { email: '', ldap: '', isSME: false },
       selectedCases: new Set(),
       currentTab: 'active',
       searchTerm: '',
@@ -720,7 +720,7 @@
       if (diffHrs > 48) slaTag = 'tag-error';
 
       const isClaimed = c.status === 'In Progress';
-      const isMine = c.claimedBy && c.claimedBy.toLowerCase() === state.user.email.toLowerCase();
+      const isMine = c.claimedBy && state.user.email && c.claimedBy.toLowerCase() === state.user.email.toLowerCase();
       const isSelected = state.selectedCases.has(c.rowIdx);
 
       return `
