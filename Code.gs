@@ -13,6 +13,12 @@ const SCHEMA = {
     'Email Address', 'LDAP', 'Role'
     // cols D+ are dynamic date columns — not validated here
   ],
+  'AppConfig': [
+    'Type', 'Value', 'SubValue'
+  ],
+  'Case Comments': [
+    'Case ID', 'Timestamp', 'Author', 'Comment'
+  ],
   'Metrics': [
     'Snapshot Time', 'Open Queue', 'Unclaimed', 'Claimed',
     'Resolved Today', 'Avg TAT Today (mins)',
@@ -129,18 +135,36 @@ function getSessionAndRole() {
   try { email = Session.getActiveUser().getEmail(); } catch (e) {}
   var ldap = email.split('@')[0].toLowerCase().trim();
 
-  var myTeam = null;
-  for (var team in TEAM_SUPERVISOR_MAP) {
-    if (TEAM_SUPERVISOR_MAP[team] === ldap) { myTeam = team; break; }
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  const configSheet = ss.getSheetByName('AppConfig');
+
+  let configData = [];
+  if (configSheet && configSheet.getLastRow() > 1) {
+    configData = configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues();
   }
+
+  var myTeam = null;
+  // Look for supervisor mapping
+  for (let row of configData) {
+    if (row[0] === 'TEAM_SUPERVISOR' && row[2].toLowerCase().trim() === ldap) {
+      myTeam = row[1];
+      break;
+    }
+  }
+
   if (!myTeam) {
-    for (var team in TEAM_SME_MAP) {
-      if ((TEAM_SME_MAP[team] || []).indexOf(ldap) > -1) { myTeam = team; break; }
+    // Look for SME mapping
+    for (let row of configData) {
+      if (row[0] === 'TEAM_SME' && row[2].toLowerCase().trim() === ldap) {
+        myTeam = row[1];
+        break;
+      }
     }
   }
 
   return {
     email: email || '',
+    ldap: ldap,
     isSME: isUserSME_(email),
     myTeam: myTeam || null
   };
@@ -238,11 +262,12 @@ function submitEscalation(formData) {
     const rowToAppend = [
       new Date(), submitterEmail, formData.ldap.trim(), formData.caseId.trim(),
       formData.symptom.trim(), formData.detailedIssue.trim(), formData.reason.trim(),
-      formData.channel, formData.team
+      formData.channel, formData.team,
+      'https://cases.connect.corp.google.com/' + formData.caseId.trim()
     ];
 
     sheet.appendRow(rowToAppend);
-_log('SUBMIT', submitterEmail, 'Case submitted', -1, formData.caseId, formData.ldap + ' | ' + formData.symptom);
+    _log('SUBMIT', submitterEmail, 'Case submitted', -1, formData.caseId, formData.ldap + ' | ' + formData.symptom);
 
     return { success: true, message: 'Escalation submitted successfully!' };
   } catch (err) { return { success: false, message: 'Server Error: ' + err.message }; }
@@ -261,6 +286,7 @@ function getOpenCases() {
   _checkRateLimit('getOpenCases');
   const ss = SpreadsheetApp.openById(MASTER_DB_ID);
   const sheet = ss.getSheetByName('Open Sup Cases');
+  if (!sheet) return [];
   const lastRow = sheet.getLastRow();
   if (lastRow < 3) return [];
 
@@ -308,6 +334,7 @@ function getResolvedCases() {
   _checkRateLimit('getResolvedCases');
   const ss = SpreadsheetApp.openById(MASTER_DB_ID);
   const sheet = ss.getSheetByName('Open Sup Cases');
+  if (!sheet) return [];
   const lastRow = sheet.getLastRow();
   if (lastRow < 3) return [];
 
@@ -316,7 +343,7 @@ function getResolvedCases() {
   const rowLimit = Math.min(lastRow - 2, 3000);
   const startRow = lastRow - rowLimit + 1;
 
-  const data = sheet.getRange(startRow, 1, rowLimit, 17).getValues();
+  const data = sheet.getRange(startRow, 1, rowLimit, 19).getValues();
   const resolvedCases = [];
 
   // Loop backwards to get newest first
@@ -655,7 +682,7 @@ function setupHourlyTrigger() {
     .everyHours(1)
     .create();
 
-  Logger.log('✅ Hourly trigger for recordMetricsSnapshot installed successfully.');
+  Logger.log(' Hourly trigger for recordMetricsSnapshot installed successfully.');
 }
 
 
@@ -669,12 +696,12 @@ function claimCase(rowIdx) {
   try {
     const ss        = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet     = ss.getSheetByName('Open Sup Cases');
+    if (!sheet) throw new Error('Sheet "Open Sup Cases" not found.');
     const smeEmail  = Session.getActiveUser().getEmail();
     const claimedAt = new Date();
 
     sheet.getRange(rowIdx, 16).setValue(claimedAt); // col 16 (P) = Claimed At
-    sheet.getRange(rowIdx, 14).setValue(smeEmail);  // <-- PUT THIS BACK HERE
-    _log('CLAIM', smeEmail, 'Case claimed', rowIdx, caseData.caseId, caseData.ldap);
+    sheet.getRange(rowIdx, 14).setValue(smeEmail);  // col 14 (N) = Handled by
 
     const row = sheet.getRange(rowIdx, 1, 1, 16).getValues()[0];
     const caseData = {
@@ -691,6 +718,7 @@ function claimCase(rowIdx) {
     };
 
     sendClaimNotification_(caseData, smeEmail);
+    _log('CLAIM', smeEmail, 'Case claimed', rowIdx, caseData.caseId, caseData.ldap);
 
     return { success: true, message: 'Case claimed.', email: smeEmail };
   } catch (e) { return { success: false, message: e.message }; }
@@ -702,6 +730,7 @@ function claimMultipleCases(rowIdxArray) {
   try {
     const ss        = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet     = ss.getSheetByName('Open Sup Cases');
+    if (!sheet) throw new Error('Sheet "Open Sup Cases" not found.');
     const smeEmail  = Session.getActiveUser().getEmail();
     const claimedAt = new Date();
 
@@ -733,12 +762,92 @@ function claimMultipleCases(rowIdxArray) {
   } catch (e) { return { success: false, message: e.message }; }
 }
 
+/**
+ * Bulk Resolve Cases.
+ */
+function bulkResolve(rowIdxArray, remarks, resolutionType) {
+  _checkRateLimit('resolveCase');
+  requireSME_();
+  try {
+    const ss             = SpreadsheetApp.openById(MASTER_DB_ID);
+    const sheet          = ss.getSheetByName('Open Sup Cases');
+    if (!sheet) throw new Error('Sheet "Open Sup Cases" not found.');
+    const smeEmail       = Session.getActiveUser().getEmail();
+    const resolutionTime = new Date();
+
+    rowIdxArray.forEach(rowIdx => {
+      const row = sheet.getRange(rowIdx, 1, 1, 16).getValues()[0];
+      const caseData = {
+        submitter      : String(row[1] || ''),
+        ldap           : String(row[2] || ''),
+        caseId         : String(row[3] || ''),
+        symptom        : String(row[4] || ''),
+        detailedIssue  : String(row[5] || ''),
+        reason         : String(row[6] || ''),
+        channel        : String(row[7] || ''),
+        team           : String(row[8] || ''),
+        caseLink       : String(row[9] || ''),
+        timestamp      : row[0] ? new Date(row[0]).toString() : '',
+        resolutionTime : resolutionTime.toString(),
+        remarks        : remarks
+      };
+
+      sheet.getRange(rowIdx, 13).setValue(resolutionTime);
+      sheet.getRange(rowIdx, 15).setValue(remarks);
+      sheet.getRange(rowIdx, 17).setValue(resolutionType || '');
+
+      _log('BULK_RESOLVE', smeEmail, 'Case resolved | Driver: ' + resolutionType, rowIdx, caseData.caseId, remarks.substring(0, 80));
+      sendResolveNotification_(caseData, smeEmail);
+    });
+
+    hideRows();
+    return { success: true, message: rowIdxArray.length + ' cases resolved successfully!' };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+/**
+ * Case Comments Logic.
+ */
+function addComment(caseId, comment) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+    const sheet = ss.getSheetByName('Case Comments');
+    if (!sheet) throw new Error('Sheet "Case Comments" not found.');
+    const email = Session.getActiveUser().getEmail();
+    const author = email.split('@')[0];
+
+    sheet.appendRow([caseId, new Date(), author, comment]);
+    return { success: true };
+  } catch (e) { return { success: false, message: e.message }; }
+}
+
+function getComments(caseId) {
+  try {
+    const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+    const sheet = ss.getSheetByName('Case Comments');
+    if (!sheet) return [];
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    const data = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+    return data
+      .filter(row => row[0].toString() === caseId.toString())
+      .map(row => ({
+        timestamp: row[1],
+        author: row[2],
+        text: row[3]
+      }))
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  } catch (e) { return []; }
+}
+
 function resolveCase(rowIdx, remarks, resolutionType) {
   _checkRateLimit('resolveCase');
   requireSME_();
   try {
     const ss             = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet          = ss.getSheetByName('Open Sup Cases');
+    if (!sheet) throw new Error('Sheet "Open Sup Cases" not found.');
     const smeEmail       = Session.getActiveUser().getEmail();
     const resolutionTime = new Date();
 
@@ -780,7 +889,7 @@ function sendClaimNotification_(caseData, smeEmail) {
     if (!caseData.submitter) return;
 
     const smeLdap    = smeEmail.split('@')[0];
-    const subject    = '✅ Your escalation has been picked up — Case ' + caseData.caseId;
+    const subject    = ' Your escalation has been picked up — Case ' + caseData.caseId;
     const claimedAt  = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
     const submittedAt = caseData.timestamp
       ? new Date(caseData.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' })
@@ -803,7 +912,7 @@ function sendClaimNotification_(caseData, smeEmail) {
             <table width="100%" cellpadding="0" cellspacing="0"><tr>
               <td><div style="color:#ffffff;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Google Play · Escalations</div>
               <div style="color:#ffffff;font-size:22px;font-weight:700;line-height:1.3;">Case Picked Up</div></td>
-              <td align="right"><div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;display:inline-block;"><span style="color:#ffffff;font-size:20px;">✅</span></div></td>
+              <td align="right"><div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;display:inline-block;"><span style="color:#ffffff;font-size:20px;"></span></div></td>
             </tr></table>
           </td>
         </tr>
@@ -852,7 +961,7 @@ function sendResolveNotification_(caseData, smeEmail) {
     if (!caseData.submitter) return;
 
     const smeLdap     = smeEmail.split('@')[0];
-    const subject     = '🎉 Your escalation has been resolved — Case ' + caseData.caseId;
+    const subject     = ' Your escalation has been resolved — Case ' + caseData.caseId;
     const resolvedAt  = new Date(caseData.resolutionTime).toLocaleString('en-US', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
     const submittedAt = caseData.timestamp
       ? new Date(caseData.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' })
@@ -875,7 +984,7 @@ function sendResolveNotification_(caseData, smeEmail) {
             <table width="100%" cellpadding="0" cellspacing="0"><tr>
               <td><div style="color:#ffffff;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Google Play · Escalations</div>
               <div style="color:#ffffff;font-size:22px;font-weight:700;line-height:1.3;">Case Resolved</div></td>
-              <td align="right"><div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;display:inline-block;"><span style="color:#ffffff;font-size:20px;">🎉</span></div></td>
+              <td align="right"><div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;display:inline-block;"><span style="color:#ffffff;font-size:20px;"></span></div></td>
             </tr></table>
           </td>
         </tr>
@@ -1010,15 +1119,16 @@ function archiveOldCases() {
 
   if (!archiveSheet) {
     archiveSheet = ss.insertSheet('Archive');
-    archiveSheet.appendRow(['Timestamp', 'Email', 'LDAP', 'Case ID', 'Symptom', 'Detailed Issue', 'Reason', 'Channel', 'Team', 'Case ID Link', 'Date', 'Time', 'Time spent before taken', 'Handled By', 'SME Remarks', 'Claimed At', 'Resolution Type']);
-    archiveSheet.getRange(1, 1, 1, 17).setFontWeight('bold').setBackground('#4285F4').setFontColor('#FFFFFF');
+    const headers = SCHEMA['Open Sup Cases'];
+    archiveSheet.appendRow(headers);
+    archiveSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('#FFFFFF');
     archiveSheet.setFrozenRows(1);
   }
 
   const lastRow = sourceSheet.getLastRow();
   if (lastRow < 3) return;
 
-  const data          = sourceSheet.getRange(3, 1, lastRow - 2, 17).getValues();
+  const data          = sourceSheet.getRange(3, 1, lastRow - 2, 19).getValues();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -1037,6 +1147,127 @@ function archiveOldCases() {
 function getWebAppUrl() {
   return ScriptApp.getService().getUrl();
 }
+
+/**
+ * Migrates hardcoded data to AppConfig sheet.
+ * Run once manually if needed.
+ */
+function importDataToConfig() {
+  _ensureSchema();
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  let sheet = ss.getSheetByName('AppConfig');
+  if (!sheet) {
+    sheet = ss.insertSheet('AppConfig');
+  }
+
+  sheet.clear();
+  sheet.appendRow(['Type', 'Value', 'SubValue']);
+
+  const TEAM_SUPERVISOR_MAP = {
+    'Team Steven': 'stevenjosephc',
+    'Team Gerry':  'gerrymae',
+    'Team Khent':  'khent',
+    'Team James':  'jamessevilla',
+    'Team Denden': 'bernardboy',
+    'Team Jim':    'jadoptante',
+    'Team Al':     'acaluang',
+    'Team Faye':   'fajirnah',
+    'Team Mel':    'tapalla',
+    'Team Mary':   'marineth'
+  };
+
+  const TEAM_SME_MAP = {
+    'Team Steven': ['sheenamae'],
+    'Team Gerry':  ['caval'],
+    'Team Khent':  ['criseldaa'],
+    'Team James':  ['acemile'],
+    'Team Denden': ['jgarlet'],
+    'Team Jim':    ['glendajoe'],
+    'Team Al':     ['elagarto'],
+    'Team Faye':   ['neljhon', 'mquirol'],
+    'Team Mel':    ['fykeivan', 'mabubay'],
+    'Team Mary':   ['fykeivan']
+  };
+
+  const data = [];
+
+  // Teams & Supervisors
+  for (let team in TEAM_SUPERVISOR_MAP) {
+    data.push(['TEAM_SUPERVISOR', team, TEAM_SUPERVISOR_MAP[team]]);
+  }
+
+  // Teams & SMEs
+  for (let team in TEAM_SME_MAP) {
+    TEAM_SME_MAP[team].forEach(sme => {
+      data.push(['TEAM_SME', team, sme]);
+    });
+  }
+
+  // Default Symptoms
+  const symptoms = [
+    'Can\'t redeem gift card', 'Refund status', 'Account Recovery', 'Identity verification process',
+    'Wrong country or currency', 'Refund policy & process', 'Promotion inquiry', 'Subscription management',
+    'Account access issue', 'Device compatibility', 'Payment failure', 'App content issue',
+    'In-app purchase problem', 'Google Play Pass', 'Google Play Points', 'Gift card fraud/scam',
+    'Parental controls/Family Link', 'Unauthorized charges', 'App update/download error'
+  ];
+  symptoms.forEach(s => data.push(['SYMPTOM', s, '']));
+
+  if (data.length > 0) {
+    sheet.getRange(2, 1, data.length, 3).setValues(data);
+  }
+
+  Logger.log('Migration to AppConfig complete.');
+}
+
+/**
+ * Fetches dynamic configuration for the form and dashboard.
+ * Utilizes CacheService for performance.
+ */
+function getFormData() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('form_data_v2');
+  if (cached) return JSON.parse(cached);
+
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  let configSheet = ss.getSheetByName('AppConfig');
+
+  if (!configSheet || configSheet.getLastRow() < 2) {
+    importDataToConfig();
+    configSheet = ss.getSheetByName('AppConfig');
+  }
+
+  // Final safety check
+  if (!configSheet) return { teams: [], symptoms: [], ldaps: [] };
+
+  const supSheet = ss.getSheetByName('SupervisorList');
+
+  const configData = configSheet.getLastRow() > 1 ? configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues() : [];
+  const supData = (supSheet && supSheet.getLastRow() > 1) ? supSheet.getRange(2, 1, supSheet.getLastRow() - 1, 2).getValues() : [];
+
+  const teams = new Set();
+  const symptoms = [];
+  const ldaps = new Set();
+
+  configData.forEach(row => {
+    if (row[0] === 'TEAM_SUPERVISOR' || row[0] === 'TEAM_SME') teams.add(row[1]);
+    if (row[0] === 'SYMPTOM') symptoms.push(row[1]);
+  });
+
+  supData.forEach(row => {
+    if (row[1]) ldaps.add(row[1].toString().trim());
+  });
+
+  const result = {
+    teams: Array.from(teams),
+    symptoms: symptoms,
+    ldaps: Array.from(ldaps)
+  };
+
+  cache.put('form_data_v2', JSON.stringify(result), 1800); // 30 min cache
+  return result;
+}
+
 function testEmail() {
   MailApp.sendEmail({
     to: 'stevenjosephc@google.com',
@@ -1050,31 +1281,6 @@ function testEmail() {
    warning for any open case that has not yet been resolved.
 ═══════════════════════════════════════════════════════════════════ */
 
-var TEAM_SUPERVISOR_MAP = {
-  'Team Steven': 'stevenjosephc',
-  'Team Gerry':  'gerrymae',
-  'Team Khent':  'khent',
-  'Team James':  'jamessevilla',
-  'Team Denden': 'bernardboy',
-  'Team Jim':    'jadoptante',
-  'Team Al':     'acaluang',
-  'Team Faye':   'fajirnah',
-  'Team Mel':    'tapalla',
-  'Team Mary':   'marineth'
-};
-
-var TEAM_SME_MAP = {
-  'Team Steven': ['sheenamae'],
-  'Team Gerry':  ['caval'],
-  'Team Khent':  ['criseldaa'],
-  'Team James':  ['acemile'],
-  'Team Denden': ['jgarlet'],
-  'Team Jim':    ['glendajoe'],
-  'Team Al':     ['elagarto'],
-  'Team Faye':   ['neljhon', 'mquirol'],
-  'Team Mel':    ['fykeivan', 'mabubay'],
-  'Team Mary':   ['fykeivan']
-};
 
 var SLA_CC_48HR = ['deanmark@google.com', 'joliveros@google.com', 'jmontrias@google.com'];
 
@@ -1082,10 +1288,13 @@ function checkSLAWarnings() {
   try {
     const ss        = SpreadsheetApp.openById(MASTER_DB_ID);
     const sheet     = ss.getSheetByName('Open Sup Cases');
-    if (!sheet) return;
+    const configSheet = ss.getSheetByName('AppConfig');
+    if (!sheet || !configSheet) return;
 
     const lastRow = sheet.getLastRow();
     if (lastRow < 3) return;
+
+    const configData = configSheet.getLastRow() > 1 ? configSheet.getRange(2, 1, configSheet.getLastRow() - 1, 3).getValues() : [];
 
     // Read cols A–S (1–19)
     const data    = sheet.getRange(3, 1, lastRow - 2, 19).getValues();
@@ -1128,9 +1337,16 @@ function checkSLAWarnings() {
       const sheetRow    = i + 3; // actual sheet row number
 
       const agentEmail  = ldap + '@google.com';
-      const supLdap     = TEAM_SUPERVISOR_MAP[team] || '';
+
+      // Dynamic Lookup
+      let supLdap = '';
+      let smeLdaps = [];
+      configData.forEach(c => {
+        if (c[0] === 'TEAM_SUPERVISOR' && c[1] === team) supLdap = c[2];
+        if (c[0] === 'TEAM_SME' && c[1] === team) smeLdaps.push(c[2]);
+      });
+
       const supEmail    = supLdap ? supLdap + '@google.com' : '';
-      const smeLdaps    = TEAM_SME_MAP[team] || [];
       const smeEmails   = smeLdaps.map(function(s) { return s + '@google.com'; });
       const submittedStr = submitted.toLocaleString('en-US', {
         timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short'
@@ -1165,7 +1381,7 @@ function checkSLAWarnings() {
 ───────────────────────────────────────── */
 function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, symptom, reason, channel, team, submittedStr, hoursOld, testMode_) {
   try {
-    const subject = '⏰ Friendly Reminder: Your Escalation Has Been Pending for 24 Hours';
+    const subject = ' Friendly Reminder: Your Escalation Has Been Pending for 24 Hours';
     const caseLink = 'https://cases.connect.corp.google.com/' + caseId;
 
     const body = `
@@ -1192,8 +1408,8 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
               </td>
               <td align="right" valign="top">
                 <div style="background:rgba(255,255,255,0.2);border-radius:12px;padding:14px 18px;text-align:center;display:inline-block;">
-                  <div style="font-size:36px;line-height:1;">⏰</div>
-                  <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;">${hoursOld}h OLD</div>
+                  <div style="color:#fff;font-size:24px;font-weight:700;line-height:1;">${hoursOld}h</div>
+                  <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;text-transform:uppercase;">Pending</div>
                 </div>
               </td>
             </tr></table>
@@ -1213,7 +1429,7 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- CASE DETAILS BOX -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#FEF7E0;border-radius:10px;border-left:4px solid #F9AB00;margin-bottom:24px;">
               <tr><td style="padding:20px 24px;">
-                <div style="color:#B06000;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;">📋 Case Details</div>
+                <div style="color:#B06000;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;"> Case Details</div>
                 ${slaRow_('Case ID',   '<a href="' + caseLink + '" style="color:#1A73E8;font-weight:600;">' + caseId + '</a>', true)}
                 ${slaRow_('Agent',     ldap)}
                 ${slaRow_('Symptom',   symptom)}
@@ -1227,7 +1443,7 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- WHAT TO DO -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#E8F0FE;border-radius:10px;margin-bottom:24px;">
               <tr><td style="padding:18px 24px;">
-                <div style="color:#1967D2;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">💡 What happens next?</div>
+                <div style="color:#1967D2;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;"> What happens next?</div>
                 <p style="margin:0;color:#3c4043;font-size:13px;line-height:1.7;">
                   A supervisor or SME from <strong>${team}</strong> will pick up your case shortly. If this is urgent, please reach out to your team lead directly. You will receive another notification if your case remains unresolved at the 48-hour mark.
                 </p>
@@ -1284,7 +1500,7 @@ function sendSLA24hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
 ───────────────────────────────────────── */
 function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, symptom, reason, channel, team, submittedStr, hoursOld, testMode_) {
   try {
-    const subject = '🚨 Urgent: Escalation Case Unresolved for 48 Hours — Immediate Action Required';
+    const subject = ' Urgent: Escalation Case Unresolved for 48 Hours — Immediate Action Required';
     const caseLink = 'https://cases.connect.corp.google.com/' + caseId;
 
     const body = `
@@ -1309,8 +1525,8 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
               </td>
               <td align="right" valign="top">
                 <div style="background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.4);border-radius:12px;padding:14px 18px;text-align:center;display:inline-block;">
-                  <div style="font-size:36px;line-height:1;">🚨</div>
-                  <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;">${hoursOld}h OLD</div>
+                  <div style="color:#fff;font-size:24px;font-weight:700;line-height:1;">${hoursOld}h</div>
+                  <div style="color:#fff;font-size:11px;font-weight:700;margin-top:4px;letter-spacing:.5px;text-transform:uppercase;">Overdue</div>
                 </div>
               </td>
             </tr></table>
@@ -1324,7 +1540,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
         <tr>
           <td style="background:#FCE8E6;padding:16px 32px;border-bottom:1px solid #F5C6C6;">
             <p style="margin:0;color:#C5221F;font-size:14px;font-weight:600;text-align:center;">
-              ⚠️ &nbsp;This case has been in the queue for <strong>${hoursOld} hours</strong> without resolution. Management has been notified.
+               &nbsp;This case has been in the queue for <strong>${hoursOld} hours</strong> without resolution. Management has been notified.
             </p>
           </td>
         </tr>
@@ -1339,7 +1555,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- CASE DETAILS BOX -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#FCE8E6;border-radius:10px;border-left:4px solid #EA4335;margin-bottom:24px;">
               <tr><td style="padding:20px 24px;">
-                <div style="color:#C5221F;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;">🚨 Case Details</div>
+                <div style="color:#C5221F;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;"> Case Details</div>
                 ${slaRow_('Case ID',   '<a href="' + caseLink + '" style="color:#C5221F;font-weight:700;">' + caseId + '</a>', true)}
                 ${slaRow_('Agent',     ldap)}
                 ${slaRow_('Symptom',   symptom)}
@@ -1354,7 +1570,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- REQUIRED ACTION -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#FEF7E0;border-radius:10px;border-left:4px solid #F9AB00;margin-bottom:24px;">
               <tr><td style="padding:18px 24px;">
-                <div style="color:#B06000;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">⚡ Required Action</div>
+                <div style="color:#B06000;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;"> Required Action</div>
                 <p style="margin:0 0 10px;color:#3c4043;font-size:13px;line-height:1.7;">
                   The following actions must be taken immediately:
                 </p>
@@ -1369,7 +1585,7 @@ function sendSLA48hrEmail_(agentEmail, supEmail, smeEmails, caseId, ldap, sympto
             <!-- MANAGERS NOTIFIED -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#E6F4EA;border-radius:10px;border-left:4px solid #34A853;margin-bottom:24px;">
               <tr><td style="padding:16px 24px;">
-                <div style="color:#137333;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">✅ Managers Notified</div>
+                <div style="color:#137333;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;"> Managers Notified</div>
                 <p style="margin:0;color:#3c4043;font-size:13px;line-height:1.6;">
                   This alert has been automatically copied to the Play Ops management team for visibility and follow-up.
                 </p>
@@ -1454,7 +1670,7 @@ function setupSLATrigger() {
     .everyHours(1)
     .create();
 
-  Logger.log('✅ SLA Warning trigger installed successfully.');
+  Logger.log(' SLA Warning trigger installed successfully.');
 }
 function testSLAEmails() {
   var ME          = 'stevenjosephc@google.com';
@@ -1472,7 +1688,7 @@ function testSLAEmails() {
   sendSLA24hrEmail_(ME, '', [], caseId, ldap, symptom, reason, channel, team, submittedStr, 24, true);
   sendSLA48hrEmail_(ME, '', [], caseId, ldap, symptom, reason, channel, team, submittedStr, 48, true);
 
-  Logger.log('✅ Test emails sent only to ' + ME);
+  Logger.log(' Test emails sent only to ' + ME);
 }
 function initSLAColumns() {
   const ss    = SpreadsheetApp.openById(MASTER_DB_ID);
@@ -1512,7 +1728,7 @@ function initSLAColumns() {
     }
   });
 
-  Logger.log('✅ initSLAColumns complete. Marked ' + marked24 + ' cases as 24hr warned, ' + marked48 + ' cases as 48hr warned.');
+  Logger.log(' initSLAColumns complete. Marked ' + marked24 + ' cases as 24hr warned, ' + marked48 + ' cases as 48hr warned.');
 }
 
 function debugSchedule() {
@@ -1541,4 +1757,179 @@ function debugSchedule() {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const todayLabel = months[nowPHT.getUTCMonth()] + '-' + nowPHT.getUTCDate();
   Logger.log('Today label we are looking for: ' + todayLabel);
+}
+
+/**
+ * Advanced analytics data fetcher.
+ */
+function getAnalyticsData(filters) {
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  const sheet = ss.getSheetByName('Open Sup Cases');
+  if (!sheet) return {};
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 3) return {};
+
+  // Pull last 5000 rows for analysis
+  const rowLimit = Math.min(lastRow - 2, 5000);
+  const startRow = lastRow - rowLimit + 1;
+  const data = sheet.getRange(startRow, 1, rowLimit, 17).getValues();
+
+  const results = {
+    trends: {},
+    teamPerformance: {},
+    driverBreakdown: {},
+    channelVolume: {}
+  };
+
+  data.forEach(row => {
+    const timestamp = row[0];
+    const team = row[8];
+    const channel = row[7];
+    const remarks = row[14];
+    const resolutionType = row[16];
+    const resTime = row[12];
+    const claimTime = row[15];
+
+    if (!timestamp) return;
+
+    // Date grouping
+    const date = new Date(timestamp);
+    const dateKey = date.toISOString().split('T')[0];
+
+    if (!results.trends[dateKey]) results.trends[dateKey] = { submitted: 0, resolved: 0 };
+    results.trends[dateKey].submitted++;
+
+    if (remarks) {
+      if (resTime) {
+        const resDate = new Date(resTime);
+        const resDateKey = resDate.toISOString().split('T')[0];
+        if (!results.trends[resDateKey]) results.trends[resDateKey] = { submitted: 0, resolved: 0 };
+        results.trends[resDateKey].resolved++;
+      }
+
+      // Team Performance
+      if (!results.teamPerformance[team]) results.teamPerformance[team] = { count: 0, totalTat: 0 };
+      results.teamPerformance[team].count++;
+      if (resTime && claimTime) {
+        const tat = (new Date(resTime) - new Date(claimTime)) / (1000 * 60);
+        if (tat > 0) results.teamPerformance[team].totalTat += tat;
+      }
+
+      // Drivers
+      if (resolutionType) {
+        const l1 = resolutionType.split(' > ')[0];
+        results.driverBreakdown[l1] = (results.driverBreakdown[l1] || 0) + 1;
+      }
+    }
+
+    // Channel
+    results.channelVolume[channel] = (results.channelVolume[channel] || 0) + 1;
+  });
+
+  return results;
+}
+
+/**
+ * Enhanced Analytics with Filtering.
+ */
+function getAnalyticsDataFiltered(timeframeDays, teamFilter) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'analytics_' + timeframeDays + '_' + (teamFilter || 'all');
+  const cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const ss = SpreadsheetApp.openById(MASTER_DB_ID);
+  const sheet = ss.getSheetByName('Open Sup Cases');
+  if (!sheet) return {};
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 3) return {};
+
+  const data = sheet.getRange(3, 1, lastRow - 2, 17).getValues();
+  const now = new Date();
+  const cutoffDate = new Date();
+  cutoffDate.setDate(now.getDate() - parseInt(timeframeDays));
+
+  const results = {
+    trends: {},
+    driverBreakdown: {},
+    channelVolume: {},
+    symptomVolume: {},
+    teamVolume: {},
+    agentVolume: {},
+    smePerformance: {},
+    metrics: {
+      total: 0,
+      resolved: 0,
+      totalTat: 0,
+      tatCount: 0
+    }
+  };
+
+  data.forEach(row => {
+    const timestamp = row[0];
+    const submitter = row[2]; // LDAP
+    const symptom = row[4];
+    const channel = row[7];
+    const team = row[8];
+    const handledBy = row[13]; // SME email
+    const remarks = row[14];
+    const resolutionType = row[16];
+    const resTime = row[12];
+    const claimTime = row[15];
+
+    if (!timestamp) return;
+    const date = new Date(timestamp);
+    if (date < cutoffDate) return;
+    if (teamFilter && teamFilter !== 'all' && team !== teamFilter) return;
+
+    results.metrics.total++;
+
+    // Trends
+    const dateKey = date.toISOString().split('T')[0];
+    if (!results.trends[dateKey]) results.trends[dateKey] = { submitted: 0, resolved: 0 };
+    results.trends[dateKey].submitted++;
+
+    // Submitting Agent Volume
+    results.agentVolume[submitter] = (results.agentVolume[submitter] || 0) + 1;
+    // Symptom Volume
+    results.symptomVolume[symptom] = (results.symptomVolume[symptom] || 0) + 1;
+    // Team Volume
+    results.teamVolume[team] = (results.teamVolume[team] || 0) + 1;
+    // Channel Volume
+    results.channelVolume[channel] = (results.channelVolume[channel] || 0) + 1;
+
+    if (remarks) {
+      results.metrics.resolved++;
+      if (resTime) {
+        const resDate = new Date(resTime);
+        const resDateKey = resDate.toISOString().split('T')[0];
+        if (!results.trends[resDateKey]) results.trends[resDateKey] = { submitted: 0, resolved: 0 };
+        results.trends[resDateKey].resolved++;
+      }
+
+      if (resTime && claimTime) {
+        const tat = (new Date(resTime) - new Date(claimTime)) / (1000 * 60);
+        if (tat > 0) {
+          results.metrics.totalTat += tat;
+          results.metrics.tatCount++;
+
+          // SME Performance
+          const smeLdap = handledBy.split('@')[0];
+          if (!results.smePerformance[smeLdap]) results.smePerformance[smeLdap] = { count: 0, totalTat: 0 };
+          results.smePerformance[smeLdap].count++;
+          results.smePerformance[smeLdap].totalTat += tat;
+        }
+      }
+
+      if (resolutionType) {
+        const l1 = resolutionType.split(' > ')[0];
+        results.driverBreakdown[l1] = (results.driverBreakdown[l1] || 0) + 1;
+      }
+    }
+  });
+
+  cache.put(cacheKey, JSON.stringify(results), 300); // 5 min cache
+  return results;
 }
